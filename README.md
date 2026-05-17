@@ -60,7 +60,7 @@ Standard tools require your LLM agent to remember and re-send all previously gen
 
 KernelBox remembers everything for you, so you only ever send the *new* code. We've included a token audit script to prove the cost savings:
 
-![Token Audit Benchmark](assets/benchmark.png)
+![Token Audit Benchmark](https://raw.githubusercontent.com/VinayChaudhari1996/langchain-kernelbox/main/assets/benchmark.png)
 
 ```bash
 # Run the benchmark locally
