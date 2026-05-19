@@ -1,17 +1,25 @@
 import uuid
 import asyncio
-from typing import Optional, Type, Any
+from typing import Optional, Type, Any, Literal
 
 from pydantic import BaseModel, Field
 from langchain_core.tools import BaseTool
 from langchain_core.callbacks import CallbackManagerForToolRun, AsyncCallbackManagerForToolRun
 
-from kernelbox import get_or_create, execute
+from kernelbox import get_or_create, execute, destroy
 
 
 class KernelBoxInput(BaseModel):
     """Schema for KernelBoxTool input."""
-    code: str = Field(..., description="The Python code to execute in the stateful IPython kernel.")
+    code: str = Field(..., description="The code to execute in the stateful IPython kernel.")
+    language: Literal["python", "bash"] = Field(
+        default="python", 
+        description="The language to execute. 'python' for python code, 'bash' for shell commands."
+    )
+    timeout: Optional[int] = Field(
+        default=None, 
+        description="Optional maximum execution time in seconds."
+    )
 
 
 class KernelBoxTool(BaseTool):
@@ -20,9 +28,9 @@ class KernelBoxTool(BaseTool):
     """
     name: str = "python_repl_stateful"
     description: str = (
-        "A stateful Python REPL tool. Use this to execute Python code. "
+        "A stateful execution environment. Use this to execute Python code or bash commands. "
         "Variables, imports, and functions persist across executions within the same session. "
-        "Input should be valid Python code."
+        "Can also execute bash by setting language='bash' and has optional timeout controls."
     )
     args_schema: Type[BaseModel] = KernelBoxInput
     session_id: str = Field(default_factory=lambda: str(uuid.uuid4()), description="The KernelBox session ID.")
@@ -35,12 +43,23 @@ class KernelBoxTool(BaseTool):
     def _format_result(self, result: Any) -> str:
         """Format the kernelbox ExecutionResult for the LLM."""
         out = []
-        if getattr(result, "stdout", None):
-            out.append(f"STDOUT:\n{result.stdout}")
+        if getattr(result, "output", None):
+            out.append(f"STDOUT:\n{result.output}")
         if getattr(result, "stderr", None):
             out.append(f"STDERR:\n{result.stderr}")
+            
+        error = getattr(result, "error", None)
+        if error is not None:
+            ename = getattr(error, "ename", "")
+            evalue = getattr(error, "evalue", "")
+            traceback = "\n".join(getattr(error, "traceback", []))
+            out.append(f"ERROR: {ename}: {evalue}\n{traceback}".strip())
+            
         if getattr(result, "return_value", None) is not None:
             out.append(f"RETURN VALUE:\n{result.return_value}")
+            
+        if getattr(result, "truncated", False):
+            out.append("\n[WARNING: Output was truncated due to length limits.]")
         
         if not out:
             return "Execution completed successfully without output."
@@ -49,24 +68,16 @@ class KernelBoxTool(BaseTool):
     def _run(
         self,
         code: str,
+        language: Literal["python", "bash"] = "python",
+        timeout: Optional[int] = None,
         run_manager: Optional[CallbackManagerForToolRun] = None,
     ) -> str:
         """Use the tool synchronously."""
         kernel = get_or_create(self.session_id)
-        result = execute(kernel, code)
+        result = execute(kernel, code, language=language, timeout=timeout)
         return self._format_result(result)
 
-    async def _arun(
-        self,
-        code: str,
-        run_manager: Optional[AsyncCallbackManagerForToolRun] = None,
-    ) -> str:
-        """Use the tool asynchronously."""
-        loop = asyncio.get_running_loop()
-        
-        def run_sync():
-            kernel = get_or_create(self.session_id)
-            return execute(kernel, code)
-            
-        result = await loop.run_in_executor(None, run_sync)
-        return self._format_result(result)
+
+    def destroy(self) -> None:
+        """Destroy the kernelbox session and clean up resources."""
+        destroy(self.session_id)

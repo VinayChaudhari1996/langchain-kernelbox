@@ -3,10 +3,12 @@ from unittest.mock import patch, MagicMock
 from langchain_kernelbox import KernelBoxTool
 
 class MockExecutionResult:
-    def __init__(self, stdout="", stderr="", return_value=None):
-        self.stdout = stdout
+    def __init__(self, output="", stderr="", error=None, return_value=None, truncated=False):
+        self.output = output
         self.stderr = stderr
+        self.error = error
         self.return_value = return_value
+        self.truncated = truncated
 
 @patch("langchain_kernelbox.tool.get_or_create")
 @patch("langchain_kernelbox.tool.execute")
@@ -14,7 +16,7 @@ def test_kernelbox_tool_sync(mock_execute, mock_get_or_create):
     # Setup mock
     mock_kernel = MagicMock()
     mock_get_or_create.return_value = mock_kernel
-    mock_execute.return_value = MockExecutionResult(stdout="test output", return_value=42)
+    mock_execute.return_value = MockExecutionResult(output="test output", return_value=42)
     
     # Run tool
     tool = KernelBoxTool(session_id="test_session")
@@ -22,7 +24,7 @@ def test_kernelbox_tool_sync(mock_execute, mock_get_or_create):
     
     # Assertions
     mock_get_or_create.assert_called_once_with("test_session")
-    mock_execute.assert_called_once_with(mock_kernel, "print('test output')\n42")
+    mock_execute.assert_called_once_with(mock_kernel, "print('test output')\n42", language="python", timeout=None)
     
     assert "STDOUT:\ntest output" in result
     assert "RETURN VALUE:\n42" in result
@@ -42,7 +44,7 @@ async def test_kernelbox_tool_async(mock_execute, mock_get_or_create):
     
     # Assertions
     mock_get_or_create.assert_called_once_with("test_async_session")
-    mock_execute.assert_called_once_with(mock_kernel, "1 / 0")
+    mock_execute.assert_called_once_with(mock_kernel, "1 / 0", language="python", timeout=None)
     
     assert "STDERR:\nerror occurred" in result
 

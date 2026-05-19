@@ -7,8 +7,9 @@ from langchain_kernelbox import KernelBoxTool
 from langchain_core.messages import SystemMessage
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
-load_dotenv()   
+# Load environment variables from .env file in the same directory as this script
+env_path = os.path.join(os.path.dirname(__file__), '.env')
+load_dotenv(env_path)   
 
 # Use the user's API key if present, otherwise default to a placeholder to prevent crash
 api_key = os.getenv("GOOGLE_API_KEY")
@@ -118,7 +119,13 @@ async def main():
     print("Initializing Google Gemini Model (gemini-3.1-flash-lite)...")
     
     try:
-        llm = ChatGoogleGenerativeAI(model="gemini-3.1-flash-lite", temperature=0)
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-3.1-flash-lite", 
+            temperature=0, 
+            top_k=1, 
+            top_p=0.0,
+            seed=42
+        )
     except Exception as e:
         print(f"Failed to initialize LLM: {e}")
         return
